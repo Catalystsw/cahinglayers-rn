@@ -1,7 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { SqlDb } from '../src/sql';
 
-/** Real SQLite, in memory, for the tests. Same contract the device driver meets. */
 export const nodeDb = (): SqlDb => {
   const db = new DatabaseSync(':memory:');
   return {

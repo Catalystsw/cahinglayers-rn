@@ -18,10 +18,6 @@ export type Feed = {
   toggleLike: (id: string) => void;
 };
 
-/**
- * The view model. React has no ViewModel class, so this hook is the thing that owns
- * state and talks to the repository — and the screen below it only reads [Feed].
- */
 export function useFeed(server: FakeServer, memory: PostStore, disk: PostStore | null): Feed {
   const [where, setWhere] = useState<Where>('memory');
   const [serverUp, setServerUpState] = useState(true);
@@ -64,8 +60,6 @@ export function useFeed(server: FakeServer, memory: PostStore, disk: PostStore |
     };
   }, [repository]);
 
-  // Only fetch when this store has nothing. Switching to a disk that already has rows
-  // shows them without touching the network — which is the whole lesson.
   useEffect(() => {
     if (!repository) return;
     void repository.feed().then((existing) => {

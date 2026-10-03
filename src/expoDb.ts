@@ -1,7 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { SqlDb } from './sql';
 
-/** The only file in the project that mentions expo-sqlite. */
 export const expoDb = (db: SQLiteDatabase): SqlDb => ({
   exec: (sql) => db.execAsync(sql),
   run: async (sql, params = []) => {

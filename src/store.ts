@@ -1,9 +1,5 @@
 import { Post } from './model';
 
-/**
- * Where the posts live. The repository above only knows this shape, which is why
- * swapping memory for a disk changes nothing above it.
- */
 export interface PostStore {
   getAll(): Promise<Post[]>;
   replaceAll(items: Post[]): Promise<void>;
@@ -11,7 +7,6 @@ export interface PostStore {
   subscribe(listener: () => void): () => void;
 }
 
-/** Notifying listeners by hand is the part Room and drift do for you. */
 export class Listeners {
   private readonly listeners = new Set<() => void>();
 

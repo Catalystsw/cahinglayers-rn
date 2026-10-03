@@ -48,10 +48,6 @@ export class SqliteStore implements PostStore {
     return rows.map(toPost);
   }
 
-  /**
-   * One transaction, not N writes. Without it a subscriber that re-reads on every
-   * change would see the table empty, then one post, then two.
-   */
   async replaceAll(items: Post[]): Promise<void> {
     await this.db.transaction(async () => {
       await this.db.run('DELETE FROM post');
@@ -75,10 +71,6 @@ export class SqliteStore implements PostStore {
     return this.listeners.add(listener);
   }
 
-  /**
-   * INSERT OR REPLACE deletes the row and inserts a new one, so it lands at the end
-   * of the table. `position` is what puts it back where the server had it.
-   */
   private insert(post: Post, position: number): Promise<void> {
     return this.db.run(
       `INSERT OR REPLACE INTO post (id, author, caption, likeCount, likedByMe, accent, position)
