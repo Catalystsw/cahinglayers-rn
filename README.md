@@ -12,6 +12,14 @@ npm test            # 6 tests, green
 npm run typecheck   # clean
 ```
 
+The `starter` branch is the same app with the store, the repository and the view model
+hollowed out into ten numbered steps — that is the one you teach from. `docs_AR.md` is
+the instructor guide.
+
+```bash
+git checkout starter
+```
+
 ## What to do with it
 
 | # | Do this | Memory | Disk |
