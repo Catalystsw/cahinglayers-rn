@@ -1,6 +1,6 @@
 import { Post } from './model';
 import { SqlDb } from './sql';
-import { Listeners, PostStore } from './store';
+import { PostStore } from './store';
 
 type Row = {
   id: string;
@@ -34,8 +34,6 @@ CREATE TABLE IF NOT EXISTS post (
 `;
 
 export class SqliteStore implements PostStore {
-  private readonly listeners = new Listeners();
-
   constructor(private readonly db: SqlDb) {}
 
   static async open(db: SqlDb): Promise<SqliteStore> {
@@ -55,7 +53,6 @@ export class SqliteStore implements PostStore {
         await this.insert(items[i], i);
       }
     });
-    this.listeners.notify();
   }
 
   async update(id: string, transform: (post: Post) => Post): Promise<void> {
@@ -64,11 +61,6 @@ export class SqliteStore implements PostStore {
       if (rows.length === 0) return;
       await this.insert(transform(toPost(rows[0])), rows[0].position);
     });
-    this.listeners.notify();
-  }
-
-  subscribe(listener: () => void): () => void {
-    return this.listeners.add(listener);
   }
 
   private insert(post: Post, position: number): Promise<void> {

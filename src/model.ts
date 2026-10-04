@@ -40,10 +40,17 @@ const SEED: Post[] = [
   },
 ];
 
+export const AUTHORS = ['Nour Adel', 'Sara Mostafa', 'Omar Hassan'];
+
 export class FakeServer {
   private reachable = true;
+  private fetches = 0;
 
   constructor(private readonly latencyMs = 700) {}
+
+  fetchCount(): number {
+    return this.fetches;
+  }
 
   isReachable(): boolean {
     return this.reachable;
@@ -54,6 +61,7 @@ export class FakeServer {
   }
 
   async fetchFeed(): Promise<Post[]> {
+    this.fetches += 1;
     await this.wait();
     this.assertReachable();
     return SEED.map((post) => ({ ...post }));

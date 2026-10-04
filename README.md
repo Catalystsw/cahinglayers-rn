@@ -1,84 +1,78 @@
-# CatalystFeed RN — storage lab
+# CatalystFeed RN — the layers lab
 
-The same lesson as the Kotlin one, in React Native. A switch at the top: **Memory** or
-**Disk**. Both fully written. No `TODO`, nothing throws.
+Three places a post can be read from, tried in order:
 
-**Expo, so you need no Xcode and no Android Studio.**
+```
+memory  →  database  →  network
+```
+
+A badge at the top of the screen says **which layer answered** and how long it took.
+Buttons knock out layers one at a time so you can watch the next one take over.
+
+Key-value is the fourth store, and it does **not** hold posts. It holds two things:
+`lastSyncedAt` and the author filter you picked. That is the lesson — key-value is for
+settings and metadata, not for data you will want to query.
 
 ```bash
 npm install
-npx expo start      # then scan the QR with Expo Go
-npm test            # 6 tests, green
+npx expo start      # scan the QR with Expo Go
+npm test            # 8 tests, green
 npm run typecheck   # clean
 ```
 
-The `starter` branch is the same app with the store, the repository and the view model
-hollowed out into ten numbered steps — that is the one you teach from. `docs_AR.md` is
-the instructor guide.
-
-```bash
-git checkout starter
-```
+The `starter` branch is the same app with the cascade, the settings and the SQLite
+store hollowed out into numbered steps. `docs_AR.md` is the instructor guide.
 
 ## What to do with it
 
-| # | Do this | Memory | Disk |
+| Do this | Badge says | Why |
+|---|---|---|
+| Open it cold | `NETWORK · ~700 ms` | nothing in any layer yet |
+| Press **Read** | `MEMORY · ~0 ms` | the network write filled memory on the way past |
+| **Clear memory**, Read | `DATABASE · ~15 ms` | memory is gone, the rows are not |
+| Read again | `MEMORY` | the database answer **promoted itself** into memory |
+| **Wipe disk**, **Clear memory**, Read | `NETWORK` | every cache is empty |
+| **Make it stale**, Read | `NETWORK` | **both caches are full and it still goes to the network** |
+| Make it stale, server **down**, Read | `DATABASE · stale` | serve what we have, and say so |
+| Pick a filter, kill the app, reopen | filter still set, `DATABASE` | the setting came from key-value, the posts from SQLite |
+
+The sixth row is the one nobody expects. A cache is not "do I have it" — it is
+"do I have it **and is it still allowed to answer**". The thing holding that permission
+is a single number in a key-value store.
+
+## The four stores
+
+| | Holds | Survives the app closing | Can you query it |
 |---|---|---|---|
-| 1 | Open it, let the feed load | 3 posts | 3 posts |
-| 2 | Server **down**, press Refresh | posts stay, red banner | same |
-| 3 | Tap a heart, still offline | fills instantly | same |
-| 4 | **Close the app. Reopen. Server down.** | **empty** | **3 posts** |
+| `MemoryStore` | an array | no | it is an array, so yes |
+| `SqliteStore` | rows | yes | yes, that is the point |
+| key-value (`Settings`) | `lastSyncedAt`, the filter | yes | **no — one key, one value** |
+| `FakeServer` | the truth | — | — |
 
-Only row 4 differs, because only row 4 is about the disk.
+`FeedCascade` is the only file that knows all four exist. Each store knows nothing
+about the others.
 
-## Where the difference lives
+## Where the layers live in code
 
-`src/store.ts` declares the shape:
+`src/cascade.ts`, in `read()`. The whole policy is about twenty lines: check freshness,
+try memory, try the database, otherwise go to the network and fill both on the way back.
 
-```ts
-export interface PostStore {
-  getAll(): Promise<Post[]>;
-  replaceAll(items: Post[]): Promise<void>;
-  update(id: string, transform: (post: Post) => Post): Promise<void>;
-  subscribe(listener: () => void): () => void;
-}
-```
+Two details worth reading twice:
 
-`MemoryStore` is an array. `SqliteStore` is the same four methods over SQLite.
-`OfflineFirstRepository` takes a `PostStore` and never learns which one it got.
+**Promotion.** When the database answers, it writes what it found into memory. That is
+why the badge flips to `MEMORY` on the next read, and why a cascade gets faster as you
+use it.
 
-## The three things that catch people
+**The emptiness check ignores the filter.** The caches always hold the whole feed; the
+filter is applied on the way out. Filter to an author with no posts and the cache is
+still full — otherwise picking a filter would hammer the network.
 
-**1. You write the reactivity yourself.** Room gives you `Flow`, drift gives you
-`watch()`. expo-sqlite gives you `addDatabaseChangeListener` — a table name and a row
-id. So `Listeners` in `src/store.ts` exists because nothing hands it to you. That is a
-real difference between stacks, not a detail.
+## Key-value in Expo
 
-**2. `position`.** An array remembers its order. A table does not, and
-`INSERT OR REPLACE` deletes the row and re-inserts it at the end — so without that
-column a post jumps to the bottom **the first time somebody likes it**, not on refresh.
+`import Storage from 'expo-sqlite/kv-store'` — no new dependency, and a drop-in
+replacement for AsyncStorage, which was removed from React Native core. It is SQLite
+underneath, which is a good thing to say out loud: the storage is a table, but the API
+refuses to let you query it. That refusal is what makes it a key-value store.
 
-**3. One transaction.** `replaceAll` deletes and re-inserts inside `transaction()`,
-because subscribers re-read on every notify. Without it the feed flickers empty.
-
-## Why the driver is behind an interface
-
-`src/sql.ts` is four methods. `src/expoDb.ts` is the only file that mentions
-expo-sqlite; `__tests__/nodeDb.ts` satisfies the same four with Node's built-in
-`node:sqlite`.
-
-That is why `npm test` runs the **real SQL** against **real SQLite** with no device and
-no mocking — the same reason the Kotlin lab uses a JVM driver for its unit tests.
-
-## Files
-
-```
-src/model.ts        Post + FakeServer (with a reachable switch)
-src/store.ts        PostStore, Listeners, MemoryStore
-src/sqliteStore.ts  the same interface over SQLite — the lesson
-src/sql.ts          the 4-method driver interface
-src/expoDb.ts       expo-sqlite adapter (device)
-src/repository.ts   unchanged whichever store it gets
-App.tsx             the screen
-__tests__/          6 tests, both stores, real SQLite via node:sqlite
-```
+`src/kv.ts` is three methods. `src/expoKv.ts` is the only file that imports it, and the
+tests satisfy the same three methods with a table in `node:sqlite`.

@@ -1,36 +1,30 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { FakeServer, Post } from './model';
-import { OfflineFirstRepository } from './repository';
-import { PostStore } from './store';
-
-export type Where = 'memory' | 'disk';
+import { Answer, FeedCascade } from './cascade';
+import { FakeServer } from './model';
+import { ALL } from './settings';
 
 export type Feed = {
-  where: Where;
-  posts: Post[];
+  answer: Answer | null;
   busy: boolean;
   error: string | null;
   serverUp: boolean;
-  setWhere: (where: Where) => void;
+  filter: string;
+  read: () => void;
+  setFilter: (value: string) => void;
   setServerUp: (up: boolean) => void;
-  refresh: () => void;
+  clearMemory: () => void;
+  wipeDisk: () => void;
+  expire: () => void;
   toggleLike: (id: string) => void;
 };
 
-export function useFeed(server: FakeServer, memory: PostStore, disk: PostStore | null): Feed {
-  const [where, setWhere] = useState<Where>('memory');
-  const [serverUp, setServerUpState] = useState(true);
-  const [posts, setPosts] = useState<Post[]>([]);
+export function useFeed(server: FakeServer, cascade: FeedCascade | null): Feed {
+  const [answer, setAnswer] = useState<Answer | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const store = where === 'disk' ? disk : memory;
-
-  const repository = useMemo(
-    () => (store ? new OfflineFirstRepository(server, store) : null),
-    [server, store],
-  );
+  const [serverUp, setServerUpState] = useState(true);
+  const [filter, setFilterState] = useState(ALL);
 
   const run = async (task: () => Promise<void>) => {
     setBusy(true);
@@ -44,46 +38,51 @@ export function useFeed(server: FakeServer, memory: PostStore, disk: PostStore |
     }
   };
 
+  const after = (change: (ready: FeedCascade) => Promise<void>) => {
+    if (!cascade) return;
+    void run(async () => {
+      await change(cascade);
+      setAnswer(await cascade.read());
+    });
+  };
+
   useEffect(() => {
-    if (!repository) return;
+    if (!cascade) return;
     let alive = true;
-    const read = () => {
-      void repository.feed().then((next) => {
-        if (alive) setPosts(next);
+    void cascade.filter().then((saved) => {
+      if (!alive) return;
+      setFilterState(saved);
+      void run(async () => {
+        const first = await cascade.read();
+        if (alive) setAnswer(first);
       });
-    };
-    const unsubscribe = repository.subscribe(read);
-    read();
+    });
     return () => {
       alive = false;
-      unsubscribe();
     };
-  }, [repository]);
-
-  useEffect(() => {
-    if (!repository) return;
-    void repository.feed().then((existing) => {
-      if (existing.length === 0) void run(() => repository.refresh());
-    });
-  }, [repository]);
+  }, [cascade]);
 
   return {
-    where,
-    posts,
+    answer,
     busy,
     error,
     serverUp,
-    setWhere,
+    filter,
+    read: () => after(async () => {}),
+    setFilter: (value) => {
+      setFilterState(value);
+      after((ready) => ready.setFilter(value));
+    },
     setServerUp: (up) => {
       server.setReachable(up);
       setServerUpState(up);
     },
-    refresh: () => {
-      if (repository) void run(() => repository.refresh());
-    },
+    clearMemory: () => after((ready) => ready.clearMemory()),
+    wipeDisk: () => after((ready) => ready.wipeDisk()),
+    expire: () => after((ready) => ready.expire()),
     toggleLike: (id) => {
-      const post = posts.find((candidate) => candidate.id === id);
-      if (repository && post) void run(() => repository.setLiked(id, !post.likedByMe));
+      const post = answer?.posts.find((candidate) => candidate.id === id);
+      if (post) after((ready) => ready.setLiked(id, !post.likedByMe));
     },
   };
 }
