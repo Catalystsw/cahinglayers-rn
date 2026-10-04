@@ -90,13 +90,15 @@ test('a like is written to both caches, not just the one that answered', async (
   await cascade.read();
 
   await cascade.setLiked('1', true);
-  expect((await cascade.read()).posts[0].likedByMe).toBe(true);
+  const fromMemory = await cascade.read();
+
+  expect(fromMemory.posts.map((post) => post.likedByMe)).toEqual([true, true, false]);
 
   await cascade.clearMemory();
   const fromDisk = await cascade.read();
 
   expect(fromDisk.layer).toBe('database');
-  expect(fromDisk.posts[0].likedByMe).toBe(true);
+  expect(fromDisk.posts.map((post) => post.likedByMe)).toEqual([true, true, false]);
 });
 
 test('the chosen filter is a setting, so it survives a restart with no network call', async () => {
